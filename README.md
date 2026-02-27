@@ -59,8 +59,44 @@ Tout message transitant sur le réseau encapsule cette structure binaire stricte
 - `0x06 MANIFEST` : Metadatas d'un fichier hébergé sur le réseau
 - `0x07 ACK` : Acquittement d'actions
 
-### Démarrage et Test Grap (Sprint 0)
+### Démarrage et Test (Sprint 0)
 1. Télécharger les dépendances: `npm install`
-2. Configurer `.env` avec vos ports libres s'ils entrent en conflit (ex: `TCP_PORT=7777`).
+2. Configurer `.env` (voir `.env.example`).
 3. Démarrer le Nœud `node src/index.js`.
-   Le programme initialisera vos clés et affichera un log garantissant l'encodage/décodage binaire.
+
+---
+
+## Sprint 1 - Couche Réseau P2P (Découverte & Routage)
+
+### Objectif
+A la fin du Sprint 1, plusieurs nœuds sur le même réseau local se découvrent automatiquement sans serveur central et s'échangent leurs tables de routage.
+
+### Modules Implémentés
+
+| Fichier | Rôle |
+|---|---|
+| `src/protocol/types.js` | Constantes des types de paquets (HELLO, PEER_LIST, etc.) |
+| `src/network/peerTable.js` | Table de routage P2P en mémoire + persistance disque |
+| `src/network/discovery.js` | Envoi/réception des HELLO en UDP Multicast toutes les 30s |
+| `src/network/tcpServer.js` | Serveur TCP d'écoute, parsing TLV, gestion connexions multiples |
+| `src/network/tcpClient.js` | Client TCP pour envoyer les PEER_LIST en unicast |
+
+### Flux de Découverte
+
+```text
+Node A (UDP)  --  HELLO (255.42.99:6000)  -->  Node B
+Node B        --  TCP PEER_LIST           -->  Node A
+Node A        --  TCP PEER_LIST           -->  Node B
+[ Les deux ont maintenant l'adresse de l'autre dans leur Peer Table ]
+```
+
+### Test de Validation Sprint 1
+Depuis **deux terminaux** (ou deux PC sur le même réseau) :
+```bash
+# Terminal 1 / PC 1
+node src/index.js
+
+# Terminal 2 / PC 2 (changer le port si sur la meme machine)
+TCP_PORT=7778 node src/index.js
+```
+**Résultat attendu** : Au bout de quelques secondes, chaque console affiche l'autre nœud dans sa `PEER_TABLE`.

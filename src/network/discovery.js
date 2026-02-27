@@ -13,9 +13,33 @@ function startDiscovery() {
     socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
     socket.on('listening', () => {
-        socket.addMembership(MULTICAST_ADDR);
-        const address = socket.address();
-        console.log(`[Discovery] Écoute UDP sur ${address.address}:${address.port} (Multicast ${MULTICAST_ADDR})`);
+        try {
+            socket.setMulticastTTL(128);
+            socket.setMulticastLoopback(true);
+            socket.setBroadcast(true);
+
+            // Pour Windows, c'est parfois capricieux d'ajouter le membership global si on n'a pas bien bind l'interface.
+            // On l'ajoute directement sur toutes les interfaces dispo
+            const os = require('os');
+            const interfaces = os.networkInterfaces();
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        try {
+                            socket.addMembership(MULTICAST_ADDR, iface.address);
+                        } catch (e) { }
+                    }
+                }
+            }
+
+            // Fallback global s'il n'y avait pas d'interface
+            try { socket.addMembership(MULTICAST_ADDR); } catch (e) { }
+
+            const address = socket.address();
+            console.log(`[Discovery] Ecoute UDP Multicast sur ${address.address}:${address.port} (${MULTICAST_ADDR})`);
+        } catch (err) {
+            console.error("[Discovery] Erreur configuration Multicast :", err.message);
+        }
     });
 
     socket.on('message', (msg, rinfo) => {
@@ -37,22 +61,21 @@ function startDiscovery() {
                 peerTable.upsert(senderIdHex, rinfo.address, tcp_port);
 
                 if (isNew) {
-                    // Si c'est un nouveau pair, on lui envoie notre PEER_LIST via TCP
+                    // Si c'est un nouveau pair, ou timeout expire, on lui repond en unicast TCP la liste des noeuds connus
                     tcpClient.sendPeerList(rinfo.address, tcp_port);
                 }
             }
         } catch (err) {
-            // Mauvais paquet ou packet d'une autre application
-            // console.error("[Discovery] Erreur parsing UDP:", err.message);
+            // Ignorer les paquets malformes (peut venir d'autres app sur le meme multicast)
         }
     });
 
-    socket.bind(MULTICAST_PORT);
+    socket.bind(MULTICAST_PORT, '0.0.0.0');
 
-    // Envoyer HELLO toutes les 30 secondes
+    // Emettre le message HELLO toutes les 30 secondes
     discoveryInterval = setInterval(sendHello, 30000);
 
-    // Envoyer le premier HELLO immédiatement
+    // Premier appel immediat
     sendHello();
 }
 
@@ -66,11 +89,10 @@ function sendHello() {
         const packet = buildPacket(TYPE.HELLO, payloadBuffer);
 
         socket.send(packet, 0, packet.length, MULTICAST_PORT, MULTICAST_ADDR, (err) => {
-            if (err) console.error("[Discovery] Erreur envoi HELLO:", err);
-            // else console.log("[Discovery] HELLO broadcasted");
+            if (err) console.error("[Discovery] Erreur d'envoi HELLO multicast:", err.message);
         });
     } catch (err) {
-        console.error("[Discovery] Erreur création HELLO", err);
+        console.error("[Discovery] Erreur creation udp HELLO", err.message);
     }
 }
 

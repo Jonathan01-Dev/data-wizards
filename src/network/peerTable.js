@@ -1,17 +1,47 @@
+const fs = require('fs');
+const path = require('path');
+
 class PeerTable {
     constructor() {
         this.peers = new Map(); // nodeId (hex) -> PeerData
+        this.dbPath = path.join(process.cwd(), '.archipel_peertable.json');
 
-        // Nettoyage periodique des pairs morts (90s)
+        // Load existing peers from disk (persistance)
+        this.loadFromDisk();
+
+        // Node considered dead after 90 seconds without HELLO
         setInterval(() => {
             const now = Date.now();
+            let changed = false;
             for (const [nodeId, peer] of this.peers.entries()) {
                 if (now - peer.last_seen > 90000) {
-                    console.log(`[PeerTable] Déconnexion du pair ${nodeId.substring(0, 8)} (Timeout)`);
+                    console.log(`[PeerTable] Deconnexion du pair ${nodeId.substring(0, 8)} (Timeout > 90s)`);
                     this.peers.delete(nodeId);
+                    changed = true;
                 }
             }
-        }, 30000); // Check every 30s
+            if (changed) this.saveToDisk();
+        }, 30000); // Check and possibly clean every 30s
+    }
+
+    loadFromDisk() {
+        try {
+            if (fs.existsSync(this.dbPath)) {
+                const data = JSON.parse(fs.readFileSync(this.dbPath, 'utf-8'));
+                this.peers = new Map(Object.entries(data));
+            }
+        } catch (e) {
+            console.error("[PeerTable] Erreur de chargement depuis le disque", e.message);
+        }
+    }
+
+    saveToDisk() {
+        try {
+            const obj = Object.fromEntries(this.peers);
+            fs.writeFileSync(this.dbPath, JSON.stringify(obj, null, 2), 'utf-8');
+        } catch (e) {
+            console.error("[PeerTable] Erreur de sauvegarde sur le disque", e.message);
+        }
     }
 
     upsert(nodeIdHex, ip, tcpPort) {
@@ -21,7 +51,7 @@ class PeerTable {
             peer.ip = ip;
             peer.tcp_port = tcpPort;
         } else {
-            console.log(`[PeerTable] Nouveau pair découvert: ${nodeIdHex.substring(0, 8)} à ${ip}:${tcpPort}`);
+            console.log(`[PeerTable] Nouveau pair decouvert: ${nodeIdHex.substring(0, 8)} a ${ip}:${tcpPort}`);
             this.peers.set(nodeIdHex, {
                 ip: ip,
                 tcp_port: tcpPort,
@@ -30,6 +60,7 @@ class PeerTable {
                 reputation: 1.0,
             });
         }
+        this.saveToDisk();
     }
 
     get(nodeIdHex) {
