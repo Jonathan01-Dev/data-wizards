@@ -64,12 +64,14 @@ Tout message transitant sur le réseau encapsule cette structure binaire stricte
 2. Configurer `.env` (voir `.env.example`).
 3. Démarrer le nœud: `node src/index.js`
 
+
 ---
 
 ## Sprint 1 - Couche Réseau P2P (Découverte & Routage)
 
 ### Objectif
-Plusieurs nœuds sur le même réseau local se découvrent automatiquement sans serveur central et s'échangent leurs tables de routage.
+A la fin du Sprint 1, plusieurs nœuds sur le même réseau local se découvrent automatiquement sans serveur central et s'échangent leurs tables de routage.
+
 
 ### Modules Implémentés
 
@@ -83,12 +85,28 @@ Plusieurs nœuds sur le même réseau local se découvrent automatiquement sans 
 
 ### Flux de Découverte
 
-```text
+
+
+Node A (UDP)  --  HELLO (255.42.99:6000)  -->  Node B
+Node B        --  TCP PEER_LIST           -->  Node A
+Node A        --  TCP PEER_LIST           -->  Node B
+[ Les deux ont maintenant l'adresse de l'autre dans leur Peer Table ]
+
+### Test de Validation Sprint 1
+Depuis **deux terminaux** (ou deux PC sur le même réseau) :
+```bash
+# Terminal 1 / PC 1
+node src/index.js
+
+# Terminal 2 / PC 2 (changer le port si sur la meme machine)
+TCP_PORT=7778 node src/index.js
+```
+**Résultat attendu** : Au bout de quelques secondes, chaque console affiche l'autre nœud dans sa `PEER_TABLE`.
+=======
 Node A  -- HELLO (UDP Multicast 239.255.42.99:6000) -->  Tous les noeuds
 Node B  --       PEER_LIST (TCP unicast)             -->  Node A
 Node A  --       PEER_LIST (TCP unicast)             -->  Node B
 [ PEER_TABLE de chaque noeud contient l'adresse des autres ]
-```
 
 ### Test de Validation Sprint 1
 Depuis **deux terminaux** ou **deux PC sur le même réseau** :
@@ -99,4 +117,3 @@ node src/index.js
 # PC 2 (ou second terminal avec port different)
 TCP_PORT=7778 node src/index.js
 ```
-**Resultat attendu** : En moins de 30 secondes, chaque console affiche l'autre nœud dans sa `PEER_TABLE`.
