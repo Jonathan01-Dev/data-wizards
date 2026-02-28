@@ -11,6 +11,11 @@ const activeConnections = new Map();
 // On utilise des lazy requires pour eviter les dependances circulaires
 function getHandshake() { return require('../protocol/handshake'); }
 function getMessaging() { return require('../messaging/message'); }
+function getManifestModule() { return require('../transfer/manifest'); }
+function getDownloaderModule() { return require('../transfer/downloader'); }
+function getStorageIndex() { return require('../storage/indexDb'); }
+function getChunker() { return require('../storage/chunker'); }
+const { buildPacket } = require('../protocol/packet');
 
 function startTCPServer() {
     server = net.createServer((socket) => {
@@ -121,6 +126,54 @@ function handleIncomingPacket(socket, pkt) {
         const plain = getMessaging().receiveMessage(pkt.payload, senderIdHex);
         if (plain) {
             console.log(`\n[MESSAGE de ${senderIdHex.substring(0, 8)}]: ${plain}\n`);
+        }
+    } else if (pkt.type === TYPE.MANIFEST) {
+        try {
+            const manifestObj = JSON.parse(pkt.payload.toString('utf-8'));
+            console.log(`[TCP Server] 📦 Manifest recu: ${manifestObj.filename} (${manifestObj.size} bytes) de ${senderIdHex.substring(0, 8)}`);
+
+            if (getManifestModule().verifyManifest(manifestObj)) {
+                getStorageIndex().addManifest(manifestObj);
+                getDownloaderModule().startDownload(manifestObj.file_id);
+            } else {
+                console.error(`[TCP Server] ❌ Signature Manifest invalide de ${senderIdHex.substring(0, 8)}`);
+            }
+        } catch (e) {
+            console.error('[TCP Server] Erreur parsing MANIFEST:', e.message);
+        }
+    } else if (pkt.type === TYPE.CHUNK_REQ) {
+        // payload: [32 file_id] [4 chunk_idx] [32 requester]
+        if (pkt.payload.length < 68) return;
+        const fileIdHex = pkt.payload.slice(0, 32).toString('hex');
+        const chunkIdx = pkt.payload.readUInt32BE(32);
+        const reqBuf = pkt.payload.slice(36, 68);
+
+        if (getStorageIndex().hasChunk(fileIdHex, chunkIdx)) {
+            const data = getChunker().loadChunkLocally(fileIdHex, chunkIdx);
+            if (data) {
+                // Renvoyer les donnes: JSON { file_id, chunk_index, chunk_hash, signature } + raw (todo signature reele si besoin, mais le manifest a le hash de verite)
+                // Pour faire simple ici, juste repondre avec CHUNK_DATA: [32 fileId] [4 idx] [data]
+                const hdr = Buffer.alloc(36);
+                hdr.write(fileIdHex, 0, 32, 'hex');
+                hdr.writeUInt32BE(chunkIdx, 32);
+
+                const replyPayload = Buffer.concat([hdr, data]);
+                const replyPacket = buildPacket(TYPE.CHUNK_DATA, replyPayload);
+                socket.write(replyPacket);
+                console.log(`[TCP Server] 📤 Envoi Chunk ${chunkIdx} a ${senderIdHex.substring(0, 8)}`);
+            }
+        }
+    } else if (pkt.type === TYPE.CHUNK_DATA) {
+        // payload: [32 fileId] [4 idx] [data]
+        if (pkt.payload.length <= 36) return;
+        const fileIdHex = pkt.payload.slice(0, 32).toString('hex');
+        const chunkIndex = pkt.payload.readUInt32BE(32);
+        const data = pkt.payload.slice(36);
+
+        const manifest = getStorageIndex().getManifest(fileIdHex);
+        if (manifest && manifest.chunks[chunkIndex]) {
+            const expectedHash = manifest.chunks[chunkIndex].hash;
+            getDownloaderModule().handleIncomingChunk(fileIdHex, chunkIndex, data, expectedHash, manifestHash = null, senderIdHex);
         }
     }
 }

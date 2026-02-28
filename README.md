@@ -103,3 +103,30 @@ Les nœuds utilisent le modèle **Trust On First Use** (comme SSH). La première
 # Lancer le test unitaire du Handshake et de l'algorithme de chiffrement
 node test-sprint2.js
 ```
+
+---
+
+## 🚀 Sprint 3 - Chunking & Transfert de Fichiers (BitTorrent-like)
+
+Le Sprint 3 apporte la capacité d'échanger des fichiers volumineux (ex: 50 Mo) de manière fiable, parallèle, et sécurisée.
+
+### Fonctionnalités Principales :
+- **Manifeste de Fichier** : Avant le transfert, le fichier est découpé en morceaux virtuels (*chunks* de 512 Ko). Un fichier JSON (le Manifest) est généré. Il contient le SHA-256 global du fichier et le SHA-256 de chaque morceau. Il est signé avec la clé Ed25519 de l'émetteur.
+- **Téléchargement Parallèle (Pipeline)** : Le receveur ouvre plusieurs requêtes simultanées (jusqu'à 3 chunks en transit) pour maximiser la bande passante.
+- **Vérification d'Intégrité Stricte** : Chaque chunk reçu est haché en SHA-256 et comparé au Manifest avant d'être sauvegardé sur le disque (`.archipel_chunks/`). Un chunk corrompu est automatiquement rejeté et redemandé.
+- **Résilience (Reprise)** : Si la connexion coupe, les chunks déjà validés sont conservés. Le téléchargement reprendra automatiquement sur les morceaux manquants dès qu'un pair disposant du fichier réapparaîtra sur le réseau.
+- **Réassemblage** : Une fois la totalité des chunks possédés, Archipel régénère le fichier final dans le dossier `downloads/` et vérifie son hash cryptographique global.
+
+### Test du Transfert (Sprint 3) :
+*(Sur deux machines connectées au même réseau local)*
+
+**Sur la machine qui RECEVOIR :**
+```bash
+node src/index.js
+```
+
+**Sur la machine qui PARTAGE (ex: un fichier de 50 Mo) :**
+```bash
+# Lancer le partage (Le manifest sera broadcasté toutes les 15s)
+node src/index.js --share test50MB.bin
+```
