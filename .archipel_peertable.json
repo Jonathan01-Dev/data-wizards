@@ -1,16 +1,1 @@
-{
-  "36c437fa470cc2551c7dc68e54449b453175963128a60db381340eed1f924ed5": {
-    "ip": "10.242.208.19",
-    "tcp_port": "7777",
-    "last_seen": 1772250522955,
-    "shared_files": [],
-    "reputation": 1
-  },
-  "e00b893f9acde514948c38fc83b67032f3e5a130843dfba27b9d84bc4155ae43": {
-    "ip": "10.242.208.19",
-    "tcp_port": "7777",
-    "last_seen": 1772251186466,
-    "shared_files": [],
-    "reputation": 1
-  }
-}
+{}
