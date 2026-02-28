@@ -11,11 +11,13 @@ const activeConnections = new Map();
 // On utilise des lazy requires pour eviter les dependances circulaires
 function getHandshake() { return require('../protocol/handshake'); }
 function getMessaging() { return require('../messaging/message'); }
+const activeConnections = new Map(); // socket -> id
 
 function startTCPServer() {
     server = net.createServer((socket) => {
         const remoteInfo = `${socket.remoteAddress}:${socket.remotePort}`;
         console.log(`[TCP Server] Nouvelle connexion de ${remoteInfo}`);
+        console.log(`[TCP Server] Nouvelle connexion entrante de ${remoteInfo}`);
         activeConnections.set(socket, Date.now());
 
         let binaryBuffer = Buffer.alloc(0);
@@ -48,6 +50,26 @@ function startTCPServer() {
                             handshakeCtx = null;
                         } catch (e) { console.error('[TCP Server] HS Auth Error:', e.message); }
                     }
+        socket.on('data', (data) => {
+            buffer = Buffer.concat([buffer, data]);
+            activeConnections.set(socket, Date.now()); // Update last activity for keep-alive
+
+            // Parsing TLV tcp stream loop. Min size: 41 bytes (MAGIC(4)+TYPE(1)+NODEID(32)+LEN(4))
+            while (buffer.length >= 41) {
+                // Verifier le HEADER.
+                const magic = buffer.slice(0, 4).toString();
+                if (magic !== MAGIC.toString()) {
+                    console.error("[TCP Server] HEADER invalide attendu ARCH, connexion rejetee. Magic=", magic);
+                    socket.destroy();
+                    return;
+                }
+
+                const payloadLen = buffer.readUInt32BE(37);
+                const totalPacketSize = 41 + payloadLen + 32; // Enclosure + payload + HMAC(32)
+
+                if (buffer.length < totalPacketSize) {
+                    // Packet non completement recu
+                    break;
                 }
                 return;
             }
@@ -70,21 +92,26 @@ function startTCPServer() {
 
                 const packetData = binaryBuffer.slice(0, totalPacketSize);
                 binaryBuffer = binaryBuffer.slice(totalPacketSize);
+                const packetData = buffer.slice(0, totalPacketSize);
+                buffer = buffer.slice(totalPacketSize);
 
                 try {
                     const pkt = parsePacket(packetData);
                     handleIncomingPacket(socket, pkt);
                 } catch (err) {
                     console.error('[TCP Server] Error parsing packet:', err.message);
+                    console.error("[TCP Server] Erreur parsing paquet", err.message);
                 }
             }
         });
 
         socket.on('error', (err) => {
+            console.error(`[TCP Server] Erreur socket ${remoteInfo}:`, err.message);
             activeConnections.delete(socket);
         });
 
         socket.on('close', () => {
+            console.log(`[TCP Server] Connexion fermee: ${remoteInfo}`);
             activeConnections.delete(socket);
         });
     });
@@ -98,7 +125,19 @@ function startTCPServer() {
 
     server.listen(TCP_PORT, '0.0.0.0', () => {
         console.log(`[TCP Server] En ecoute sur le port ${TCP_PORT}`);
+    server.listen(TCP_PORT, '0.0.0.0', () => {
+        console.log(`[TCP Server] En ecoute pour les transferts sur le port ${TCP_PORT}`);
     });
+
+    // Keep-alive: Ping toutes les 15s (ici juste simule par un check activite pour MVP S1)
+    setInterval(() => {
+        const now = Date.now();
+        for (let [sock, lastActivity] of activeConnections.entries()) {
+            if (now - lastActivity > 20000) { // Si pas d'activite depuis 20s
+                // Dans une v2, envoyer un ping. Ici on assume que le P2P est async
+            }
+        }
+    }, 15000);
 }
 
 function handleIncomingPacket(socket, pkt) {
@@ -108,6 +147,8 @@ function handleIncomingPacket(socket, pkt) {
         try {
             const peers = JSON.parse(pkt.payload.toString('utf-8'));
             console.log(`[TCP Server] PEER_LIST de ${senderIdHex.substring(0, 8)} (${peers.length} pairs)`);
+            const peers = JSON.parse(peerListStr);
+            console.log(`[TCP Server] Recu PEER_LIST de ${senderIdHex.substring(0, 8)}: ${peers.length} pairs locaux connus`);
             peers.forEach(p => {
                 if (p.nodeId !== getPublicKey().toString('hex')) {
                     peerTable.upsert(p.nodeId, p.ip, p.tcp_port);
@@ -122,6 +163,10 @@ function handleIncomingPacket(socket, pkt) {
         if (plain) {
             console.log(`\n[MESSAGE de ${senderIdHex.substring(0, 8)}]: ${plain}\n`);
         }
+            console.error("[TCP Server] Erreur json parsing PEER_LIST", e.message);
+        }
+    } else {
+        console.log(`[TCP Server] Recu paquet inattendu type ${pkt.type} de ${senderIdHex.substring(0, 8)}`);
     }
 }
 
