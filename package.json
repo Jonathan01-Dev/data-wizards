@@ -1,17 +1,21 @@
 {
   "name": "archipel",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Protocole P2P chiffré et décentralisé",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "test": "node test-sprint2.js"
   },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "dotenv": "^17.3.1",
-    "libsodium-wrappers": "^0.8.2"
+    "libsodium-wrappers": "^0.8.2",
+    "ws": "^8.19.0"
   }
 }

@@ -5,7 +5,9 @@ const { TYPE } = require('../protocol/types');
 const peerTable = require('./peerTable');
 const { getPublicKey } = require('../crypto/keys');
 
-let server = null;
+function getApi() { return require('../api/server'); }
+
+let tcpServer = null;
 const activeConnections = new Map();
 
 // On utilise des lazy requires pour eviter les dependances circulaires
@@ -17,7 +19,7 @@ function getStorageIndex() { return require('../storage/indexDb'); }
 function getChunker() { return require('../storage/chunker'); }
 
 function startTCPServer() {
-    server = net.createServer((socket) => {
+    tcpServer = net.createServer((socket) => {
         const remoteInfo = `${socket.remoteAddress}:${socket.remotePort}`;
         console.log(`[TCP Server] Nouvelle connexion de ${remoteInfo}`);
         activeConnections.set(socket, Date.now());
@@ -93,14 +95,14 @@ function startTCPServer() {
         });
     });
 
-    server.on('error', (err) => {
+    tcpServer.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
             console.error(`[TCP Server] Port ${TCP_PORT} deja occupe.`);
             process.exit(1);
         }
     });
 
-    server.listen(TCP_PORT, '0.0.0.0', () => {
+    tcpServer.listen(TCP_PORT, '0.0.0.0', () => {
         console.log(`[TCP Server] En ecoute sur le port ${TCP_PORT}`);
     });
 }
@@ -125,6 +127,7 @@ function handleIncomingPacket(socket, pkt) {
         const plain = getMessaging().receiveMessage(pkt.payload, senderIdHex);
         if (plain) {
             console.log(`\n[MESSAGE de ${senderIdHex.substring(0, 8)}]: ${plain}\n`);
+            getApi().pushIncomingMessage(senderIdHex, plain);
         }
     } else if (pkt.type === TYPE.MANIFEST) {
         (async () => {

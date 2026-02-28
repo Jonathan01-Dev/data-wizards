@@ -4,6 +4,8 @@ const { startTCPServer } = require("./network/tcpServer");
 const peerTable = require("./network/peerTable");
 const { sendMessage } = require("./messaging/message");
 const { createAndStoreManifest, broadcastManifest } = require("./transfer/manifest");
+const { startApiServer } = require("./api/server");
+
 
 // Parsing des arguments CLI basique
 const args = process.argv.slice(2);
@@ -11,6 +13,12 @@ let fileToShare = null;
 if (args.includes('--share')) {
     fileToShare = args[args.indexOf('--share') + 1];
 }
+// Flag --no-ai desactive l'integration Gemini
+if (args.includes('--no-ai')) {
+    process.env.NO_AI = 'true';
+    console.log('[Config] Mode --no-ai: Gemini desactive.');
+}
+
 
 async function main() {
     try {
@@ -20,6 +28,8 @@ async function main() {
         // Lancement des services reseau
         startTCPServer();
         startDiscovery();
+        startApiServer();
+
 
         // Intervalle d'affichage du statut
         setInterval(() => {

@@ -3,6 +3,8 @@ const path = require('path');
 
 const PEER_TABLE_PATH = path.join(process.cwd(), '.archipel_peertable.json');
 
+function getApi() { return require('../api/server'); }
+
 class PeerTable {
     constructor() {
         this.peers = new Map(); // nodeId (hex) -> PeerData
@@ -32,6 +34,8 @@ class PeerTable {
                 for (const [nodeId, peer] of Object.entries(data)) {
                     this.peers.set(nodeId, peer);
                 }
+                this.saveToDisk(); // Corrected from this.save()
+                setImmediate(() => getApi().pushPeerUpdate());
                 console.log(`[PeerTable] ${this.peers.size} pairs charges depuis le disque`);
             }
         } catch (e) {
@@ -65,6 +69,7 @@ class PeerTable {
             });
         }
         this.saveToDisk();
+        getApi().pushPeerUpdate();
     }
 
     get(nodeIdHex) {
