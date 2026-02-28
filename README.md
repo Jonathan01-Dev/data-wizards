@@ -64,3 +64,42 @@ Tout message transitant sur le réseau encapsule cette structure binaire stricte
 2. Configurer `.env` avec vos ports libres s'ils entrent en conflit (ex: `TCP_PORT=7777`).
 3. Démarrer le Nœud `node src/index.js`.
    Le programme initialisera vos clés et affichera un log garantissant l'encodage/décodage binaire.
+
+---
+
+## 🌐 Sprint 1 - Couche Réseau P2P (Découverte)
+
+Le Sprint 1 a mis en place la véritable infrastructure P2P *Zero-Config*.
+
+### Fonctionnalités Implémentées :
+- **Découverte (UDP Multicast)** : Les nœuds broadcastent leur présence (paquet `HELLO`) toutes les 30s. Si un PC rejoint le réseau local, il est immédiatement détecté par les autres, sans serveur central.
+- **Table de Routage (PeerTable)** : Chaque nœud maintient une liste en mémoire et sur disque (`.archipel_peertable.json`) des pairs actifs.
+- **Routage TCP** : Un serveur TCP écoute les connexions entrantes. Lorsqu'un nouveau pair est découvert, un échange `PEER_LIST` est effectué pour partager les carnets d'adresses.
+
+---
+
+## 🔒 Sprint 2 - Chiffrement E2E et Identité
+
+Le Sprint 2 a ajouté la couche de sécurité, d'authentification et de chiffrement des messages.
+
+### Spécifications Cryptographiques :
+- **Identité du Nœud** : Clé publique permanente `Ed25519`.
+- **Échange de Clés** : Courbe elliptique `X25519` (ECDH) avec clés éphémères jetables pour chaque session (Perfect Forward Secrecy).
+- **Chiffrement Symétrique** : `AES-256-GCM` pour garantir à la fois la confidentialité et l'intégrité (AuthTag) des données transférées.
+- **Dérivation de Clé (KDF)** : `HMAC-SHA256` pour dériver la clé de session à partir du secret partagé X25519.
+
+### Le Handshake Archipel (Inspiré de Noise Protocol) :
+1. **Alice** envoie sa clé éphémère X25519 (`HELLO`).
+2. **Bob** répond avec sa clé éphémère et la signe avec sa clé permanente Ed25519 (`HELLO_REPLY`).
+3. Alice et Bob calculent le secret partagé et dérivent une clé `AES-256-GCM`.
+4. **Alice** signe la clé de session pour s'authentifier (`AUTH`).
+5. **Bob** valide et ouvre le tunnel (`AUTH_OK`).
+
+### Web of Trust (TOFU) :
+Les nœuds utilisent le modèle **Trust On First Use** (comme SSH). La première fois qu'ils rencontrent une identité (IP + Clé Publique), ils l'enregistrent dans `.archipel_trust.json`. Lors d'une reconnexion, si la clé publique a changé, le nœud bloque la connexion (Détection *Man-in-the-Middle*).
+
+### Test du Sprint 2 :
+```bash
+# Lancer le test unitaire du Handshake et de l'algorithme de chiffrement
+node test-sprint2.js
+```

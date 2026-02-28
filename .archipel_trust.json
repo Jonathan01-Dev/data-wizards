@@ -4,5 +4,11 @@
     "firstSeen": 1772243247398,
     "trusted": true,
     "signature": null
+  },
+  "aabbcc008549ae1cafff836da3ccc4bb1d1a43e57f5672fcfbc98e080e2fb7fd": {
+    "publicKey": "ff0011004e489ed1f11eae5ff83259e4d2c8521feceb1bf14675430785c28829",
+    "firstSeen": 1772244025651,
+    "trusted": true,
+    "signature": null
   }
 }

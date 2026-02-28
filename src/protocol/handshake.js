@@ -66,8 +66,8 @@ async function initiateHandshake(targetIp, targetPort, targetNodeIdHex) {
                     const sharedKeys = await computeClientSharedKeys(ephemeralKeyPair, bobEphemeralPub);
                     const sessionKey = deriveSessionKey(Buffer.from(sharedKeys.sharedTx));
 
-                    // Etape 4: Envoi AUTH (signature Ed25519 sur le hash du shared secret)
-                    const sharedHash = crypto.createHash('sha256').update(Buffer.from(sharedKeys.sharedTx)).digest();
+                    // Etape 4: Envoi AUTH (signature Ed25519 sur le hash de la cle de session)
+                    const sharedHash = crypto.createHash('sha256').update(sessionKey).digest();
                     const sigA = sign(sharedHash);
                     const authPayload = JSON.stringify({
                         sig: sigA.toString('hex'),
