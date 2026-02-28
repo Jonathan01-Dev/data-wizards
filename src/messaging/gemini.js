@@ -18,14 +18,14 @@ function buildPrompt(context, userQuery) {
         .map(m => `[${m.from === 'me' ? 'Moi' : m.from.substring(0, 8)}]: ${m.text}`)
         .join('\n');
 
-    return `Tu es l'assistant IA intégré dans Archipel, un protocole P2P chiffré et décentralisé développé lors d'un hackathon.
+    return `Tu es l'assistant IA intégré dans Archipel, un protocole P2P chiffré et décentralisé développé lors d'un hackathon. Ton rôle est d'aider l'utilisateur à comprendre le réseau, à résoudre des problèmes techniques, ou simplement à discuter.
     
 Contexte du chat Archipel (messages récents):
 ${ctxLines || '(aucun message récent)'}
 
 Question de l'utilisateur: ${userQuery}
 
-Réponds de manière concise et utile en une ou deux phrases maximum.`;
+Réponds de manière claire, structurée (utilise du Markdown si pertinent), et directement utile. N'hésite pas à faire des listes ou des retours à la ligne pour la lisibilité.`;
 }
 
 /**
@@ -54,7 +54,7 @@ async function queryGemini(context, userQuery) {
                         { role: 'user', parts: [{ text: buildPrompt(context, userQuery) }] }
                     ],
                     generationConfig: {
-                        maxOutputTokens: 200,
+                        maxOutputTokens: 2048,
                         temperature: 0.7
                     }
                 }),

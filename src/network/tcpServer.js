@@ -116,7 +116,16 @@ function handleIncomingPacket(socket, pkt) {
             console.log(`[TCP Server] PEER_LIST de ${senderIdHex.substring(0, 8)} (${peers.length} pairs)`);
             peers.forEach(p => {
                 if (p.nodeId !== getPublicKey().toString('hex')) {
-                    peerTable.upsert(p.nodeId, p.ip, p.tcp_port);
+                    let peerIp = p.ip;
+                    // Fallback TCP discovery: si l'IP est 0.0.0.0, on utilise l'adresse de la socket
+                    if (peerIp === '0.0.0.0') {
+                        peerIp = socket.remoteAddress;
+                        // Nettoyage prefixe IPv6 pour IPv4
+                        if (peerIp && peerIp.startsWith('::ffff:')) {
+                            peerIp = peerIp.substring(7);
+                        }
+                    }
+                    peerTable.upsert(p.nodeId, peerIp, p.tcp_port);
                 }
             });
         } catch (e) {
