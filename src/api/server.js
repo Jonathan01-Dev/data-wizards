@@ -143,70 +143,72 @@ function startApiServer() {
             }
 
             // Standard JSON POST
-            let body = '';
-            req.on('data', d => body += d);
-            await new Promise(r => req.on('end', r));
+            if (url !== '/api/upload') {
+                let body = '';
+                req.on('data', d => body += d);
+                await new Promise(r => req.on('end', r));
 
-            let data = {};
-            try { data = JSON.parse(body); } catch (e) { return json(res, { error: 'Invalid JSON' }, 400); }
+                let data = {};
+                try { data = JSON.parse(body); } catch (e) { return json(res, { error: 'Invalid JSON' }, 400); }
 
-            if (url === '/api/share') {
-                const { filepath } = data;
-                if (!filepath) return json(res, { error: 'filepath requis' }, 400);
+                if (url === '/api/share') {
+                    const { filepath } = data;
+                    if (!filepath) return json(res, { error: 'filepath requis' }, 400);
 
-                // On s'assure que le fichier existe avant de tenter quoi que ce soit
-                const fs = require('fs');
-                if (!fs.existsSync(filepath)) return json(res, { error: 'Fichier source introuvable' }, 404);
+                    // On s'assure que le fichier existe avant de tenter quoi que ce soit
+                    const fs = require('fs');
+                    if (!fs.existsSync(filepath)) return json(res, { error: 'Fichier source introuvable' }, 404);
 
-                try {
-                    const { createAndStoreManifest, broadcastManifest } = require('../transfer/manifest');
-                    const manifest = await createAndStoreManifest(filepath);
-                    await broadcastManifest(manifest);
-                    // Limiter le broadcast régulier à 1 minute
-                    const intervalId = setInterval(() => broadcastManifest(manifest), 15000);
-                    setTimeout(() => clearInterval(intervalId), 60000);
-                    return json(res, { ok: true, file_id: manifest.file_id, filename: manifest.filename, nb_chunks: manifest.nb_chunks });
-                } catch (e) {
-                    return json(res, { error: e.message }, 500);
+                    try {
+                        const { createAndStoreManifest, broadcastManifest } = require('../transfer/manifest');
+                        const manifest = await createAndStoreManifest(filepath);
+                        await broadcastManifest(manifest);
+                        // Limiter le broadcast régulier à 1 minute
+                        const intervalId = setInterval(() => broadcastManifest(manifest), 15000);
+                        setTimeout(() => clearInterval(intervalId), 60000);
+                        return json(res, { ok: true, file_id: manifest.file_id, filename: manifest.filename, nb_chunks: manifest.nb_chunks });
+                    } catch (e) {
+                        return json(res, { error: e.message }, 500);
+                    }
                 }
-            }
 
-            if (url === '/api/download') {
-                const { file_id } = data;
-                if (!file_id) return json(res, { error: 'file_id requis' }, 400);
-                const { startDownload } = require('../transfer/downloader');
-                startDownload(file_id);
-                return json(res, { ok: true });
-            }
-
-            if (url === '/api/message') {
-                const { targetId, text } = data;
-                if (!targetId || !text) return json(res, { error: 'targetId et text requis' }, 400);
-                try {
-                    const { sendMessage } = require('../messaging/message');
-                    await sendMessage(targetId, text);
-                    const entry = { from: 'me', to: targetId, text, ts: Date.now() };
-                    messageLog.push(entry);
-                    broadcast('message', entry);
+                if (url === '/api/download') {
+                    const { file_id } = data;
+                    if (!file_id) return json(res, { error: 'file_id requis' }, 400);
+                    const { startDownload } = require('../transfer/downloader');
+                    startDownload(file_id);
                     return json(res, { ok: true });
-                } catch (e) {
-                    return json(res, { error: e.message }, 500);
                 }
-            }
 
-            if (url === '/api/gemini') {
-                const { query, context } = data;
-                if (!query) return json(res, { error: 'query requis' }, 400);
-                try {
-                    const { queryGemini } = require('../messaging/gemini');
-                    const answer = await queryGemini(context || [], query);
-                    return json(res, { answer });
-                } catch (e) {
-                    return json(res, { error: e.message }, 500);
+                if (url === '/api/message') {
+                    const { targetId, text } = data;
+                    if (!targetId || !text) return json(res, { error: 'targetId et text requis' }, 400);
+                    try {
+                        const { sendMessage } = require('../messaging/message');
+                        await sendMessage(targetId, text);
+                        const entry = { from: 'me', to: targetId, text, ts: Date.now() };
+                        messageLog.push(entry);
+                        broadcast('message', entry);
+                        return json(res, { ok: true });
+                    } catch (e) {
+                        return json(res, { error: e.message }, 500);
+                    }
                 }
-            }
 
-            return json(res, { error: 'Not found' }, 404);
+                if (url === '/api/gemini') {
+                    const { query, context } = data;
+                    if (!query) return json(res, { error: 'query requis' }, 400);
+                    try {
+                        const { queryGemini } = require('../messaging/gemini');
+                        const answer = await queryGemini(context || [], query);
+                        return json(res, { answer });
+                    } catch (e) {
+                        return json(res, { error: e.message }, 500);
+                    }
+                }
+
+                return json(res, { error: 'Not found' }, 404);
+            }
         }
 
         return json(res, { error: 'Method not allowed' }, 405);

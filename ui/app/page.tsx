@@ -23,9 +23,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [error, setError] = useState('');
-  const [timeline, setTimeline] = useState<{ id: string, msg: string, time: Date, type: string }[]>(() => [
-    { id: 'boot', msg: 'Système initialisé. Nœud actif.', time: new Date(), type: 'system' }
-  ]);
+  const [timeline, setTimeline] = useState<{ id: string, msg: string, time: Date, type: string }[]>([]);
 
   // Calculate Health Score
   const calculateHealth = () => {
@@ -39,6 +37,9 @@ export default function DashboardPage() {
   const healthScore = calculateHealth();
 
   useEffect(() => {
+    // Prevent hydration mismatch by setting the initial boot message on mount only
+    setTimeline([{ id: 'boot', msg: 'Système initialisé. Nœud actif.', time: new Date(), type: 'system' }]);
+
     let ws: WebSocket;
 
     const fetchData = async () => {
@@ -53,8 +54,9 @@ export default function DashboardPage() {
         setPeers(prev => {
           const newPeers = p.filter((np: Peer) => !prev.find(op => op.nodeId === np.nodeId));
           if (newPeers.length > 0) {
-            const events = newPeers.map((np: Peer) => ({
-              id: `peer_${np.nodeId}_${Date.now()}`,
+            const timestamp = Date.now();
+            const events = newPeers.map((np: Peer, index: number) => ({
+              id: `peer_${np.nodeId}_${timestamp}_${index}`,
               msg: `Nouveau pair découvert : ${np.nodeId.substring(0, 8)}`,
               time: new Date(),
               type: 'network'
@@ -88,8 +90,9 @@ export default function DashboardPage() {
           setPeers(prev => {
             const newPeers = p.filter((np: Peer) => !prev.find(op => op.nodeId === np.nodeId));
             if (newPeers.length > 0) {
-              const events = newPeers.map((np: Peer) => ({
-                id: `peer_${np.nodeId}_${Date.now()}`,
+              const timestamp = Date.now();
+              const events = newPeers.map((np: Peer, index: number) => ({
+                id: `ws_peer_${np.nodeId}_${timestamp}_${index}`,
                 msg: `Nouveau pair découvert (WS) : ${np.nodeId.substring(0, 8)}`,
                 time: new Date(),
                 type: 'network'
