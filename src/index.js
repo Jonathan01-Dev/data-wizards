@@ -26,19 +26,18 @@ async function main() {
         }, 30000);
 
         // Exemple: Demonstration d'envoi automatique si un pair est trouve (facultatif)
-        /*
         setInterval(async () => {
             const peers = peerTable.getAll();
             if (peers.length > 0) {
                 const target = peers[0].nodeId;
+                console.log(`[Demo] Tentative d'envoi automatique vers ${target.substring(0, 8)}...`);
                 try {
-                    await sendMessage(target, "Hello from Archipel E2E!");
-                } catch(e) {
-                    // Handshake peut etre en cours
+                    await sendMessage(target, "Hello from Archipel E2E (Auto)!");
+                } catch (err) {
+                    console.error(`[Demo] Erreur d'envoi vers ${target.substring(0, 8)}:`, err.message);
                 }
             }
-        }, 60000);
-        */
+        }, 15000);
 
     } catch (err) {
         console.error("[Fatal] Erreur au demarrage:", err.message);

@@ -28,26 +28,26 @@ function startTCPServer() {
             const dataStr = data.toString('utf-8');
 
             // 1. Detection Handshake (Format texte ARCH_HS:...)
-            if (dataStr.startsWith('ARCH_HS:') || (textBuffer.length > 0 && !dataStr.startsWith('ARCH'))) {
+            if (dataStr.includes('ARCH_HS:')) {
                 textBuffer += dataStr;
 
-                // Etape HELLO
-                if (textBuffer.includes('ARCH_HS:HELLO:') && !handshakeCtx) {
-                    try {
-                        const payload = textBuffer.split('ARCH_HS:HELLO:')[1].split('\n')[0].trim();
-                        handshakeCtx = await getHandshake().respondToHandshake(socket, payload);
-                    } catch (e) { console.error('[TCP Server] HS Hello Error:', e.message); }
-                    textBuffer = '';
-                }
+                // On split par ligne pour traiter chaque bloc ARCH_HS:
+                let lines = textBuffer.split('\n');
+                textBuffer = lines.pop(); // Garder la derniere ligne incomplete
 
-                // Etape AUTH
-                if (textBuffer.includes('ARCH_HS:AUTH:') && handshakeCtx) {
-                    try {
-                        const payload = textBuffer.split('ARCH_HS:AUTH:')[1].split('\n')[0].trim();
-                        await getHandshake().finalizeHandshake(handshakeCtx.alicePermanentId, payload);
-                    } catch (e) { console.error('[TCP Server] HS Auth Error:', e.message); }
-                    textBuffer = '';
-                    handshakeCtx = null;
+                for (let line of lines) {
+                    if (line.includes('ARCH_HS:HELLO:')) {
+                        try {
+                            const payload = line.split('ARCH_HS:HELLO:')[1].trim();
+                            handshakeCtx = await getHandshake().respondToHandshake(socket, payload);
+                        } catch (e) { console.error('[TCP Server] HS Hello Error:', e.message); }
+                    } else if (line.includes('ARCH_HS:AUTH:') && handshakeCtx) {
+                        try {
+                            const payload = line.split('ARCH_HS:AUTH:')[1].trim();
+                            await getHandshake().finalizeHandshake(handshakeCtx.alicePermanentId, payload);
+                            handshakeCtx = null;
+                        } catch (e) { console.error('[TCP Server] HS Auth Error:', e.message); }
+                    }
                 }
                 return;
             }

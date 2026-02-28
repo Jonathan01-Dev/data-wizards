@@ -32,7 +32,7 @@ async function initiateHandshake(targetIp, targetPort, targetNodeIdHex) {
                 sender_id: myPublicKey.toString('hex'),
                 timestamp: Date.now()
             });
-            const msg = Buffer.from('ARCH_HS:HELLO:' + helloPayload);
+            const msg = Buffer.from('ARCH_HS:HELLO:' + helloPayload + '\n');
             socket.write(msg);
         });
 
