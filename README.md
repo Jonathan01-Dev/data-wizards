@@ -26,9 +26,15 @@ Ce dépôt contient le prototype développé lors de la 1ère édition du Hackat
            |                                                              |
            |                  <====== TCP Stream =======>                 |
            |                       (PEER_LIST, DATA)                      |
-           v                                                              v
-   [ PeerTable Mem ]                                              [ PeerTable Mem ]
-   - ad137321@NdeB                                                - 23a8fc19@NdeA
+           |                                                              |
+           ▼                                                              ▼
+    ┌──────────────┐                                               ┌──────────────┐
+    │  API (3001)  │ <─────────── HTTP + WebSocket ──────────────> │  API (3001)  │
+    └──────┬───────┘                                               └──────┬───────┘
+           │                                                              │
+    ┌──────▼───────┐                                               ┌──────▼───────┐
+    │ Next.js (UI) │                                               │ Next.js (UI) │
+    └──────────────┘                                               └──────────────┘
 ```
 
 *Aucun serveur central. Chaque Nœud stocke sa liste de pairs et effectue du routage local.*
@@ -133,31 +139,6 @@ Node B        --  TCP PEER_LIST           -->  Node A
 Node A        --  TCP PEER_LIST           -->  Node B
 [ Les deux ont maintenant l'adresse de l'autre dans leur Peer Table ]
 
-### Test de Validation Sprint 1
-Depuis **deux terminaux** (ou deux PC sur le même réseau) :
-```bash
-# Terminal 1 / PC 1
-node src/index.js
-
-# Terminal 2 / PC 2 (changer le port si sur la meme machine)
-TCP_PORT=7778 node src/index.js
-```
-**Résultat attendu** : Au bout de quelques secondes, chaque console affiche l'autre nœud dans sa `PEER_TABLE`.
-Node A  -- HELLO (UDP Multicast 239.255.42.99:6000) -->  Tous les noeuds
-Node B  --       PEER_LIST (TCP unicast)             -->  Node A
-Node A  --       PEER_LIST (TCP unicast)             -->  Node B
-[ PEER_TABLE de chaque noeud contient l'adresse des autres ]
-
-### Test de Validation Sprint 1
-Depuis **deux terminaux** ou **deux PC sur le même réseau** :
-```bash
-# PC 1
-node src/index.js
-
-# PC 2 (ou second terminal avec port different)
-TCP_PORT=7778 node src/index.js
-```
-
 ---
 
 ## 🚀 Sprint 3 - Chunking & Transfert de Fichiers (BitTorrent-like)
@@ -165,22 +146,48 @@ TCP_PORT=7778 node src/index.js
 Le Sprint 3 apporte la capacité d'échanger des fichiers volumineux (ex: 50 Mo) de manière fiable, parallèle, et sécurisée.
 
 ### Fonctionnalités Principales :
-- **Manifeste de Fichier** : Avant le transfert, le fichier est découpé en morceaux virtuels (*chunks* de 512 Ko). Un fichier JSON (le Manifest) est généré. Il contient le SHA-256 global du fichier et le SHA-256 de chaque morceau. Il est signé avec la clé Ed25519 de l'émetteur.
-- **Téléchargement Parallèle (Pipeline)** : Le receveur ouvre plusieurs requêtes simultanées (jusqu'à 3 chunks en transit) pour maximiser la bande passante.
-- **Vérification d'Intégrité Stricte** : Chaque chunk reçu est haché en SHA-256 et comparé au Manifest avant d'être sauvegardé sur le disque (`.archipel_chunks/`). Un chunk corrompu est automatiquement rejeté et redemandé.
-- **Résilience (Reprise)** : Si la connexion coupe, les chunks déjà validés sont conservés. Le téléchargement reprendra automatiquement sur les morceaux manquants dès qu'un pair disposant du fichier réapparaîtra sur le réseau.
-- **Réassemblage** : Une fois la totalité des chunks possédés, Archipel régénère le fichier final dans le dossier `downloads/` et vérifie son hash cryptographique global.
+- **Manifeste de Fichier** : Avant le transfert, le fichier est découpé en morceaux virtuels (*chunks* de 512 Ko). Un fichier JSON (le Manifest) est généré avec les hashs SHA-256 globaux et par morceaux, signé par l'émetteur.
+- **Téléchargement Parallèle (Pipeline)** : Le receveur ouvre jusqu'à 3 requêtes simultanées pour maximiser la bande passante.
+- **Vérification d'Intégrité Stricte** : Chaque chunk reçu est haché en SHA-256 et comparé au Manifest. Un chunk corrompu est rejeté et redemandé.
+- **Résilience (Reprise)** : Les chunks validés sont conservés. Le téléchargement reprend automatiquement sur les morceaux manquants dès qu'un pair réapparaît.
+- **Réassemblage** : Une fois complet, Archipel régénère le fichier final dans `downloads/` et vérifie son hash final.
 
-### Test du Transfert (Sprint 3) :
-*(Sur deux machines connectées au même réseau local)*
+---
 
-**Sur la machine qui RECEVOIR :**
-```bash
-node src/index.js
+## 🎨 Sprint 4 - Interface Next.js & IA Gemini
+
+Le Sprint 4 transforme le protocole en une application moderne avec interface visuelle et assistance IA.
+
+### Fonctionnalités Clés :
+- **Dashboard Next.js** : Interface "Glassmorphism" sombre pour surveiller le réseau.
+- **Live Stream WS** : Mise à jour instantanée des pairs et messages via WebSocket.
+- **Intégration Gemini AI** : Assistant intelligent via commande `/ask` ou tag `@archipel-ai`.
+- **Mode Offline** : Flag `--no-ai` pour désactiver l'IA proprement.
+
+### Architecture Technique Finale
+
+```mermaid
+graph TD
+    UI[Next.js Dashboard] <--> |HTTP/WS| API[API Bridge Node.js]
+    API <--> |Internal| Core[Archipel Core Engine]
+    Core <--> |UDP| Discovery[UDP Multicast Discovery]
+    Core <--> |TCP| Transfer[TCP File Transfer]
+    Core <--> |Crypto| Crypto[Sodium/AES-GCM]
+    API -.-> |HTTPS| Gemini[Google Gemini AI]
 ```
 
-**Sur la machine qui PARTAGE (ex: un fichier de 50 Mo) :**
-```bash
-# Lancer le partage (Le manifest sera broadcasté toutes les 15s)
-node src/index.js --share test50MB.bin
-```
+### Guide de Démo (Pas à pas) :
+
+1. **Préparation** :
+   ```bash
+   npm install
+   cd ui && npm install && npm run build
+   cd ..
+   ```
+2. **Lancement du Nœud (Backend)** : `node src/index.js`
+3. **Lancement de l'Interface (Frontend)** : `cd ui && npm run dev`
+4. **Utilisation** : Ouvrez `http://localhost:3000`. Testez la découverte, le chat chiffré, l'IA (`/ask ...`), et le partage de fichiers.
+
+### Identité de l'Équipe
+- **Team Name** : Archipel Wizards
+- **Hackathon** : LBS Hackathon 2026 - Sprint Final.

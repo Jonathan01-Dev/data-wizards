@@ -5,12 +5,14 @@ const crypto = require('crypto');
 const { getPublicKey } = require('../crypto/keys');
 const { encrypt, decrypt } = require('../crypto/e2e');
 const storageIndex = require('../storage/indexDb');
+function getApi() { return require('../api/server'); }
 const { loadChunkLocally, saveChunkLocally, hashChunk } = require('../storage/chunker');
 const { buildPacket } = require('../protocol/packet');
 const { TYPE } = require('../protocol/types');
 const peerTable = require('../network/peerTable');
 
 const MAX_PARALLEL_DOWNLOADS = 3;
+const CHUNK_TIMEOUT = 5000; // 5 seconds timeout for a chunk request
 const activeDownloads = {}; // fileId => active state
 
 /**
@@ -137,7 +139,7 @@ function requestChunkFromPeer(fileIdHex, chunkIndex, peer) {
                 state.inFlight.delete(chunkIndex);
                 downloadNextChunks(fileIdHex);
             }
-        }, 5000); // 5s timeout max pour 1 chunk
+        }, CHUNK_TIMEOUT); // 5s timeout max pour 1 chunk
 
     } catch (e) {
         state.inFlight.delete(chunkIndex);
@@ -160,6 +162,13 @@ function handleIncomingChunk(fileIdHex, chunkIndex, chunkData, expectedHash, man
 
     saveChunkLocally(fileIdHex, chunkIndex, chunkData);
     storageIndex.markChunkAvailable(fileIdHex, chunkIndex);
+
+    // Push progress to UI
+    const manifest = storageIndex.getManifest(fileIdHex);
+    if (manifest) {
+        const received = storageIndex.getDownloadedChunksCount(fileIdHex);
+        getApi().pushDownloadProgress(fileIdHex, received, manifest.nb_chunks);
+    }
 
     if (activeDownloads[fileIdHex]) {
         activeDownloads[fileIdHex].inFlight.delete(chunkIndex);
