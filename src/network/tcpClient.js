@@ -10,15 +10,15 @@ function sendPeerList(ip, port) {
 
     const client = new net.Socket();
     client.connect(port, ip, () => {
-        console.log(`[TCP Client] Envoi PEER_LIST à ${ip}:${port}`);
+        console.log(`[TCP Client] Envoi unicast PEER_LIST a ${ip}:${port}`);
         client.write(packet);
 
-        // Fermer après l'envoi pour l'instant (Sprint 1)
+        // Fermer la connexion apres envoi du PEER_LIST
         setTimeout(() => client.destroy(), 500);
     });
 
     client.on('error', (err) => {
-        console.error(`[TCP Client] Erreur connexion à ${ip}:${port} pour PEER_LIST: ${err.message}`);
+        console.error(`[TCP Client] Erreur de livraison PEER_LIST vers ${ip}:${port}: ${err.message}`);
     });
 }
 
