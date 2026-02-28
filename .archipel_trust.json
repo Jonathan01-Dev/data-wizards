@@ -1,0 +1,20 @@
+{
+  "aabbcc112233445566778899aabbcc112233445566778899aabbcc1122334455": {
+    "publicKey": "ffee001122334455667788ffee001122334455667788ffee001122334455667788",
+    "firstSeen": 1772237748058,
+    "trusted": true,
+    "signature": null
+  },
+  "aabbcc001544144023aaba3a2cd78bccbea14d10fd1cbbf2c732a6513522d863": {
+    "publicKey": "ff00110071a5a4cc0ea7629e3f9dcb4190447b60530b1da1cc907943e36a5ff2",
+    "firstSeen": 1772238262763,
+    "trusted": true,
+    "signature": null
+  },
+  "aabbcc007e05572ec45b892b2ca3915e1f3627f8989a2fa954ad88b626528257": {
+    "publicKey": "ff00110030b0d638519cc826ae2e2aec6fb978062b98723c73c8c9b9f61956c3",
+    "firstSeen": 1772238354625,
+    "trusted": true,
+    "signature": null
+  }
+}
