@@ -10,5 +10,11 @@
     "firstSeen": 1772244025651,
     "trusted": true,
     "signature": null
+  },
+  "aabbcc003ad5f0d88545d408c526643e4c8245077a7ea8effe0dc01257bf333b": {
+    "publicKey": "ff001100bb528f8ca6179829338371a10b79ec751b4bb2ceb092204fa63086c0",
+    "firstSeen": 1772252049001,
+    "trusted": true,
+    "signature": null
   }
 }

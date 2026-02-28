@@ -127,19 +127,21 @@ function handleIncomingPacket(socket, pkt) {
             console.log(`\n[MESSAGE de ${senderIdHex.substring(0, 8)}]: ${plain}\n`);
         }
     } else if (pkt.type === TYPE.MANIFEST) {
-        try {
-            const manifestObj = JSON.parse(pkt.payload.toString('utf-8'));
-            console.log(`[TCP Server] 📦 Manifest recu: ${manifestObj.filename} (${manifestObj.size} bytes) de ${senderIdHex.substring(0, 8)}`);
+        (async () => {
+            try {
+                const manifestObj = JSON.parse(pkt.payload.toString('utf-8'));
+                console.log(`[TCP Server] 📦 Manifest recu: ${manifestObj.filename} (${manifestObj.size} bytes) de ${senderIdHex.substring(0, 8)}`);
 
-            if (getManifestModule().verifyManifest(manifestObj)) {
-                getStorageIndex().addManifest(manifestObj);
-                getDownloaderModule().startDownload(manifestObj.file_id);
-            } else {
-                console.error(`[TCP Server] ❌ Signature Manifest invalide de ${senderIdHex.substring(0, 8)}`);
+                if (await getManifestModule().verifyManifest(manifestObj)) {
+                    getStorageIndex().addManifest(manifestObj);
+                    getDownloaderModule().startDownload(manifestObj.file_id);
+                } else {
+                    console.error(`[TCP Server] ❌ Signature Manifest invalide de ${senderIdHex.substring(0, 8)}`);
+                }
+            } catch (e) {
+                console.error('[TCP Server] Erreur parsing MANIFEST:', e.message);
             }
-        } catch (e) {
-            console.error('[TCP Server] Erreur parsing MANIFEST:', e.message);
-        }
+        })();
     } else if (pkt.type === TYPE.CHUNK_REQ) {
         // payload: [32 file_id] [4 chunk_idx] [32 requester]
         if (pkt.payload.length < 68) return;
