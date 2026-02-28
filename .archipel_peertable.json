@@ -1,1 +1,9 @@
-{}
+{
+  "63cb640ac2cd14f1d25d43a73172cea6111e7c990616526673427d9c19d20e55": {
+    "ip": "172.20.10.2",
+    "tcp_port": 7777,
+    "last_seen": 1772293101474,
+    "shared_files": [],
+    "reputation": 1
+  }
+}

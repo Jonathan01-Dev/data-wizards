@@ -83,6 +83,21 @@ export default function DashboardPage() {
             time: new Date(),
             type: 'security'
           }, ...t].slice(0, 10));
+        } else if (msg.type === 'peers') {
+          const p = msg.payload;
+          setPeers(prev => {
+            const newPeers = p.filter((np: Peer) => !prev.find(op => op.nodeId === np.nodeId));
+            if (newPeers.length > 0) {
+              const events = newPeers.map((np: Peer) => ({
+                id: `peer_${np.nodeId}_${Date.now()}`,
+                msg: `Nouveau pair découvert (WS) : ${np.nodeId.substring(0, 8)}`,
+                time: new Date(),
+                type: 'network'
+              }));
+              setTimeline(t => [...events, ...t].slice(0, 10));
+            }
+            return p;
+          });
         }
       };
     } catch { /* ignore */ }

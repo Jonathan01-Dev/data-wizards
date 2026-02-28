@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import { ShieldCheck, MessageSquare, Bot, Send, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, MessageSquare, Bot, Send, ShieldAlert, Paperclip } from 'lucide-react';
 
 const API = 'http://localhost:3001';
 const WS_URL = 'ws://localhost:3001';
@@ -103,6 +103,37 @@ export default function ChatPage() {
         setSending(false);
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !targetId) return;
+
+        setSending(true);
+        try {
+            const upRes = await fetch(`${API}/api/upload`, {
+                method: 'POST',
+                headers: { 'x-filename': encodeURIComponent(file.name) },
+                body: file
+            });
+            const data = await upRes.json();
+
+            if (data.ok && data.file_id) {
+                // Envoyer le message de notification avec l'ID du fichier
+                const text = `📁 Fichier partagé : ${file.name} (ID: ${data.file_id})`;
+                await fetch(`${API}/api/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetId, text })
+                });
+            } else {
+                alert(`Erreur d'upload : ${data.error || 'Inconnue'}`);
+            }
+        } catch (err: any) {
+            alert(`Erreur de connexion : ${err.message}`);
+        }
+        setSending(false);
+        e.target.value = ''; // reset file input
+    };
+
     return (
         <div className="animate-in" style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
             <div className="page-header" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -178,7 +209,8 @@ export default function ChatPage() {
                                     borderTopLeftRadius: !isMe ? '0px' : 'var(--radius-lg)',
                                     fontSize: '14px',
                                     lineHeight: '1.5',
-                                    position: 'relative'
+                                    position: 'relative',
+                                    whiteSpace: 'pre-wrap'
                                 }}>
                                     {m.text}
                                     {!isAi && !isSystem && (
@@ -208,6 +240,23 @@ export default function ChatPage() {
                 {/* Input Area */}
                 <div style={{ padding: 'var(--sp-4)', borderTop: '1px solid var(--border)', background: 'var(--bg-app)' }}>
                     <form onSubmit={handleSend} style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                        <label
+                            style={{
+                                cursor: targetId && !sending ? 'pointer' : 'not-allowed',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'var(--bg-hover)',
+                                padding: '0 16px',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid var(--border)',
+                                opacity: targetId && !sending ? 1 : 0.5
+                            }}
+                            title={!targetId ? "Sélectionnez un pair pour envoyer un fichier" : "Envoyer un fichier"}
+                        >
+                            <Paperclip size={20} color="var(--text-muted)" />
+                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={sending || !targetId} />
+                        </label>
                         <input
                             type="text"
                             className="input"
