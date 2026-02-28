@@ -1,6 +1,12 @@
+const fs = require('fs');
+const path = require('path');
+
+const PEER_TABLE_PATH = path.join(process.cwd(), '.archipel_peertable.json');
+
 class PeerTable {
     constructor() {
         this.peers = new Map(); // nodeId (hex) -> PeerData
+        this.loadFromDisk();
 
         // Nettoyage periodique des pairs morts (90s)
         setInterval(() => {
@@ -12,6 +18,29 @@ class PeerTable {
                 }
             }
         }, 30000); // Check every 30s
+    }
+
+    loadFromDisk() {
+        try {
+            if (fs.existsSync(PEER_TABLE_PATH)) {
+                const data = JSON.parse(fs.readFileSync(PEER_TABLE_PATH, 'utf-8'));
+                for (const [nodeId, peer] of Object.entries(data)) {
+                    this.peers.set(nodeId, peer);
+                }
+                console.log(`[PeerTable] ${this.peers.size} pairs charges depuis le disque`);
+            }
+        } catch (e) {
+            console.error('[PeerTable] Erreur chargement disque:', e.message);
+        }
+    }
+
+    saveToDisk() {
+        try {
+            const data = Object.fromEntries(this.peers);
+            fs.writeFileSync(PEER_TABLE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+        } catch (e) {
+            console.error('[PeerTable] Erreur sauvegarde disque:', e.message);
+        }
     }
 
     upsert(nodeIdHex, ip, tcpPort) {
@@ -30,6 +59,7 @@ class PeerTable {
                 reputation: 1.0,
             });
         }
+        this.saveToDisk();
     }
 
     get(nodeIdHex) {

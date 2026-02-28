@@ -25,19 +25,22 @@ async function main() {
             }
         }, 30000);
 
-        // Exemple: Demonstration d'envoi automatique si un pair est trouve (facultatif)
+        // Exemple: Demonstration d'envoi automatique vers TOUS les pairs connus
         setInterval(async () => {
             const peers = peerTable.getAll();
             if (peers.length > 0) {
-                const target = peers[0].nodeId;
-                console.log(`[Demo] Tentative d'envoi automatique vers ${target.substring(0, 8)}...`);
-                try {
-                    await sendMessage(target, "Hello from Archipel E2E (Auto)!");
-                } catch (err) {
-                    console.error(`[Demo] Erreur d'envoi vers ${target.substring(0, 8)}:`, err.message);
+                for (const peer of peers) {
+                    const target = peer.nodeId;
+                    console.log(`[Demo] Tentative d'envoi automatique vers ${target.substring(0, 8)} (${peer.ip}:${peer.tcp_port})...`);
+                    try {
+                        await sendMessage(target, "Hello from Archipel E2E (Auto)!");
+                    } catch (err) {
+                        // On log l'erreur mais on continue pour les autres pairs
+                        console.error(`[Demo] Erreur d'envoi vers ${target.substring(0, 8)}: ${err.message}`);
+                    }
                 }
             }
-        }, 15000);
+        }, 20000);
 
     } catch (err) {
         console.error("[Fatal] Erreur au demarrage:", err.message);
