@@ -6,10 +6,6 @@ const PEER_TABLE_PATH = path.join(process.cwd(), '.archipel_peertable.json');
 class PeerTable {
     constructor() {
         this.peers = new Map(); // nodeId (hex) -> PeerData
-class PeerTable {
-    constructor() {
-        this.peers = new Map(); // nodeId (hex) -> PeerData
-        this.dbPath = path.join(process.cwd(), '.archipel_peertable.json');
 
         // Load existing peers from disk (persistance)
         this.loadFromDisk();
@@ -27,26 +23,6 @@ class PeerTable {
             }
             if (changed) this.saveToDisk();
         }, 30000); // Check and possibly clean every 30s
-    }
-
-    loadFromDisk() {
-        try {
-            if (fs.existsSync(this.dbPath)) {
-                const data = JSON.parse(fs.readFileSync(this.dbPath, 'utf-8'));
-                this.peers = new Map(Object.entries(data));
-            }
-        } catch (e) {
-            console.error("[PeerTable] Erreur de chargement depuis le disque", e.message);
-        }
-    }
-
-    saveToDisk() {
-        try {
-            const obj = Object.fromEntries(this.peers);
-            fs.writeFileSync(this.dbPath, JSON.stringify(obj, null, 2), 'utf-8');
-        } catch (e) {
-            console.error("[PeerTable] Erreur de sauvegarde sur le disque", e.message);
-        }
     }
 
     loadFromDisk() {
