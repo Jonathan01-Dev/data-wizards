@@ -97,6 +97,50 @@ function startApiServer() {
 
         // ---- POST routes ----
         if (req.method === 'POST') {
+            // Handle streaming upload separately (don't consume body yet)
+            if (url === '/api/upload') {
+                const path = require('path');
+                const fs = require('fs');
+
+                const uploadDir = path.join(__dirname, '../../uploads');
+                if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+                const rawFilename = req.headers['x-filename'] || `upload_${Date.now()}`;
+                const filename = path.basename(decodeURIComponent(rawFilename));
+                const savePath = path.join(uploadDir, filename);
+
+                console.log(`[API] Upload en cours: ${filename} -> ${savePath}`);
+
+                const fileStream = fs.createWriteStream(savePath);
+
+                return new Promise((resolve) => {
+                    fileStream.on('finish', async () => {
+                        console.log(`[API] Upload termine: ${filename}. Generation du manifeste...`);
+                        try {
+                            const { createAndStoreManifest, broadcastManifest } = require('../transfer/manifest');
+                            const manifest = await createAndStoreManifest(savePath);
+                            await broadcastManifest(manifest);
+                            setInterval(() => broadcastManifest(manifest), 15000);
+                            json(res, { ok: true, filename: manifest.filename, file_id: manifest.file_id });
+                        } catch (e) {
+                            console.error(`[API] Erreur apres upload: ${e.message}`);
+                            json(res, { error: e.message }, 500);
+                        }
+                        resolve();
+                    });
+
+                    req.pipe(fileStream);
+
+                    req.on('error', (err) => {
+                        console.error(`[API] Erreur streaming upload: ${err.message}`);
+                        json(res, { error: err.message }, 500);
+                        fileStream.destroy();
+                        resolve();
+                    });
+                });
+            }
+
+            // Standard JSON POST
             let body = '';
             req.on('data', d => body += d);
             await new Promise(r => req.on('end', r));
@@ -107,6 +151,11 @@ function startApiServer() {
             if (url === '/api/share') {
                 const { filepath } = data;
                 if (!filepath) return json(res, { error: 'filepath requis' }, 400);
+
+                // On s'assure que le fichier existe avant de tenter quoi que ce soit
+                const fs = require('fs');
+                if (!fs.existsSync(filepath)) return json(res, { error: 'Fichier source introuvable' }, 404);
+
                 try {
                     const { createAndStoreManifest, broadcastManifest } = require('../transfer/manifest');
                     const manifest = await createAndStoreManifest(filepath);

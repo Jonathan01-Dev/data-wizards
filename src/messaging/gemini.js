@@ -7,7 +7,7 @@
  */
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-3-flash-preview';
 
 /**
  * Construit le prompt avec le contexte conversationnel.
@@ -74,6 +74,9 @@ async function queryGemini(context, userQuery) {
     } catch (e) {
         if (e.name === 'TimeoutError' || e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
             return '📡 Gemini inaccessible — vérifiez votre connexion Internet.';
+        }
+        if (e.message.includes('Quota exceeded') || e.message.includes('429')) {
+            return '⏳ Trop de requêtes ! Gemini (Free Tier) fait une petite pause. Réessayez dans une minute.';
         }
         return `❌ Erreur Gemini: ${e.message}`;
     }

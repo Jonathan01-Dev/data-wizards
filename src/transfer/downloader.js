@@ -190,7 +190,7 @@ function handleIncomingChunk(fileIdHex, chunkIndex, chunkData, expectedHash, man
 /**
  * Reconstruit le fichier original à partir des chunks et valide le hash final.
  */
-function reassembleFile(fileIdHex) {
+async function reassembleFile(fileIdHex) {
     const manifest = storageIndex.getManifest(fileIdHex);
     if (!manifest) return;
 
@@ -200,28 +200,45 @@ function reassembleFile(fileIdHex) {
     }
 
     const finalPath = path.join(DOWNLOADS_DIR, manifest.filename);
-    const fd = fs.openSync(finalPath, 'w');
+    const writeStream = fs.createWriteStream(finalPath);
 
-    let offset = 0;
-    for (let i = 0; i < manifest.nb_chunks; i++) {
-        const chunkData = loadChunkLocally(fileIdHex, i);
-        if (!chunkData) {
-            console.error(`[Download] 🛑 Impossible d'assembler, chunk ${i} manquant.`);
-            fs.closeSync(fd);
-            return;
+    try {
+        for (let i = 0; i < manifest.nb_chunks; i++) {
+            const chunkData = loadChunkLocally(fileIdHex, i);
+            if (!chunkData) {
+                console.error(`[Download] 🛑 Impossible d'assembler, chunk ${i} manquant.`);
+                writeStream.end();
+                return;
+            }
+            // On attend que le chunk soit écrit pour ne pas saturer le buffer d'écriture
+            if (!writeStream.write(chunkData)) {
+                await new Promise(resolve => writeStream.once('drain', resolve));
+            }
         }
-        fs.writeSync(fd, chunkData, 0, chunkData.length, offset);
-        offset += chunkData.length;
+    } catch (err) {
+        console.error(`[Download] Erreur fatale lors de l'assemblage:`, err.message);
+        writeStream.end();
+        return;
     }
-    fs.closeSync(fd);
 
-    // Verifier le SHA-256 complet
-    const finalHash = crypto.createHash('sha256').update(fs.readFileSync(finalPath)).digest('hex');
-    if (finalHash === manifest.file_id) {
-        console.log(`[Download] ✅ SUCCES: Fichier resinthetise parfaitement (${manifest.size} bytes). Fichier dispo dans ./downloads/`);
-    } else {
-        console.error(`[Download] ❌ ERREUR CORRUPTION: Le hash final du fichier differe du manifest !`);
-    }
+    writeStream.end();
+
+    writeStream.on('finish', async () => {
+        // Verifier le SHA-256 complet via STREAM pour eviter Heap Overflow
+        const hash = crypto.createHash('sha256');
+        const readStream = fs.createReadStream(finalPath);
+
+        for await (const chunk of readStream) {
+            hash.update(chunk);
+        }
+
+        const finalHash = hash.digest('hex');
+        if (finalHash === manifest.file_id) {
+            console.log(`[Download] ✅ SUCCES: Fichier resinthetise parfaitement (${manifest.size} Mo). Dispo dans ./downloads/`);
+        } else {
+            console.error(`[Download] ❌ ERREUR CORRUPTION: Le hash final du fichier differe du manifest ! (${finalHash} !== ${manifest.file_id})`);
+        }
+    });
 }
 
 module.exports = {

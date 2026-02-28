@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { ShieldCheck, MessageSquare, Bot, Send, ShieldAlert } from 'lucide-react';
 
 const API = 'http://localhost:3001';
 const WS_URL = 'ws://localhost:3001';
@@ -13,44 +14,44 @@ interface Message {
 
 interface Peer {
     nodeId: string;
-    ip: string;
 }
 
 export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [peers, setPeers] = useState<Peer[]>([]);
     const [targetId, setTargetId] = useState('');
-    const [input, setInput] = useState('');
+    const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
-    const [aiLoading, setAiLoading] = useState(false);
-    const bottomRef = useRef<HTMLDivElement>(null);
+    const [aiThinking, setAiThinking] = useState(false);
 
-    async function fetchInitial() {
-        try {
-            const [msgs, ps] = await Promise.all([
-                fetch(`${API}/api/messages`).then(r => r.json()),
-                fetch(`${API}/api/peers`).then(r => r.json()),
-            ]);
-            setMessages(msgs);
-            setPeers(ps);
-            if (ps.length > 0 && !targetId) setTargetId(ps[0].nodeId);
-        } catch { /* backend offline */ }
-    }
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetchInitial();
+        fetch(`${API}/api/messages`).then(r => r.json()).then(setMessages).catch(() => { });
+        fetch(`${API}/api/peers`).then(r => r.json()).then(p => {
+            setPeers(p);
 
-        // WebSocket pour les messages live
+            // Auto-select from URL if coming from the Network page
+            const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+            const preselect = urlParams.get('p');
+            if (preselect && p.find((x: Peer) => x.nodeId === preselect)) {
+                setTargetId(preselect);
+            } else if (p.length > 0) {
+                setTargetId(p[0].nodeId);
+            }
+        }).catch(() => { });
+
         let ws: WebSocket;
         try {
             ws = new WebSocket(WS_URL);
             ws.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'message') {
-                    setMessages(prev => [...prev, msg.payload].slice(-200));
-                }
-                if (msg.type === 'peers') {
-                    setPeers(msg.payload);
+                const data = JSON.parse(e.data);
+                if (data.type === 'message') {
+                    setMessages(prev => [...prev, data.payload]);
+                } else if (data.type === 'messages') {
+                    setMessages(data.payload);
+                } else if (data.type === 'peers') {
+                    setPeers(data.payload);
                 }
             };
         } catch { /* ignore */ }
@@ -59,125 +60,174 @@ export default function ChatPage() {
     }, []);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages, aiThinking]);
 
-    async function handleSend() {
-        if (!input.trim()) return;
-        const text = input.trim();
-        setInput('');
+    const handleSend = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!inputText || (!targetId && !inputText.startsWith('/ask') && !inputText.startsWith('@archipel-ai'))) return;
 
-        // Gemini AI commands: /ask ... or @archipel-ai ...
-        if (text.startsWith('/ask ') || text.startsWith('@archipel-ai ')) {
-            const query = text.replace(/^\/ask |^@archipel-ai /, '');
-            setAiLoading(true);
+        const text = inputText;
+        setInputText('');
+        setSending(true);
+
+        if (text.startsWith('/ask') || text.startsWith('@archipel-ai')) {
+            setAiThinking(true);
+            const query = text.replace(/^\/ask\s*|@archipel-ai\s*/, '');
+            // Local echo
             setMessages(prev => [...prev, { from: 'me', text, ts: Date.now() }]);
+
             try {
-                const res = await fetch(`${API}/api/gemini`, {
+                const r = await fetch(`${API}/api/gemini`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query, context: messages.slice(-10) }),
+                    body: JSON.stringify({ query, context: messages.slice(-5) })
                 });
-                const data = await res.json();
-                setMessages(prev => [...prev, { from: 'gemini', text: `🤖 ${data.answer}`, ts: Date.now() }]);
+                const res = await r.json();
+                setMessages(prev => [...prev, { from: 'archipel-ai', text: res.answer, ts: Date.now() }]);
             } catch {
-                setMessages(prev => [...prev, { from: 'gemini', text: '🔌 Gemini inaccessible (mode offline)', ts: Date.now() }]);
-            } finally {
-                setAiLoading(false);
+                setMessages(prev => [...prev, { from: 'system', text: '⚠️ Assistant IA indisponible (Vérifiez la clé API)', ts: Date.now() }]);
             }
-            return;
+            setAiThinking(false);
+        } else {
+            try {
+                await fetch(`${API}/api/message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetId, text })
+                });
+            } catch { /* ignore */ }
         }
-
-        // Encrypted message to peer
-        if (!targetId) return;
-        setSending(true);
-        try {
-            const res = await fetch(`${API}/api/message`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetId, text }),
-            });
-            if (!res.ok) throw new Error();
-        } catch {
-            setMessages(prev => [...prev, { from: 'system', text: '❌ Envoi échoué', ts: Date.now() }]);
-        } finally {
-            setSending(false);
-        }
-    }
-
-    function BubbleClass(m: Message) {
-        if (m.from === 'me') return 'msg-bubble msg-me';
-        if (m.from === 'gemini') return 'msg-bubble msg-ai';
-        return 'msg-bubble msg-peer';
-    }
-
-    const formatTime = (ts: number) => new Date(ts).toLocaleTimeString('fr');
+        setSending(false);
+    };
 
     return (
-        <div>
-            <div className="page-header">
-                <h1>Chat & IA</h1>
-                <p>Messages chiffrés E2E · Tapez <strong>/ask</strong> ou <strong>@archipel-ai</strong> pour interroger Gemini</p>
+        <div className="animate-in" style={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
+            <div className="page-header" style={{ marginBottom: 'var(--sp-4)' }}>
+                <h1>Chat Sécurisé</h1>
+                <p>Messagerie chiffrée de bout en bout et contexte IA local</p>
             </div>
 
-            {/* Target peer selector */}
-            <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Envoyer à :</span>
-                <select
-                    value={targetId}
-                    onChange={e => setTargetId(e.target.value)}
-                    className="input"
-                    style={{ flex: 1 }}
-                >
-                    {peers.length === 0 && <option value="">Aucun pair (en attente...)</option>}
-                    {peers.map(p => (
-                        <option key={p.nodeId} value={p.nodeId}>
-                            {p.nodeId.substring(0, 12)}... ({p.ip})
-                        </option>
-                    ))}
-                </select>
-            </div>
+            <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
 
-            {/* Chat window */}
-            <div className="chat-container">
-                <div className="chat-messages">
-                    {messages.length === 0 && (
-                        <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', marginTop: 40 }}>
-                            Aucun message. Envoyez le premier ou tapez /ask pour l&apos;IA ✨
-                        </p>
-                    )}
-                    {messages.map((m, i) => (
-                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'me' ? 'flex-end' : 'flex-start' }}>
-                            <div className="msg-sender">
-                                {m.from === 'me' ? 'Moi' : m.from === 'gemini' ? '🤖 Gemini AI' : `${m.from.substring(0, 8)}...`}
-                                {' · '}{formatTime(m.ts)}
+                {/* Chat Header */}
+                <div style={{ padding: 'var(--sp-3)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-hover)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ShieldCheck size={18} color="var(--green)" />
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--green)', letterSpacing: '0.05em' }}>CANAL CHIFFRÉ E2E</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Pair cible :</span>
+                        <select
+                            className="input"
+                            style={{ padding: '6px 12px', fontSize: '12px', width: '220px', height: '32px' }}
+                            value={targetId}
+                            onChange={e => setTargetId(e.target.value)}
+                        >
+                            {peers.length === 0 ? <option value="">Aucun pair en ligne</option> : null}
+                            {peers.map(p => (
+                                <option key={p.nodeId} value={p.nodeId}>
+                                    {p.nodeId.substring(0, 16)}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Chat Messages */}
+                <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 'var(--sp-4)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+                    {messages.length === 0 && !aiThinking && (
+                        <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <MessageSquare size={40} style={{ margin: '0 auto var(--sp-2) auto', opacity: 0.2 }} />
+                            <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)', marginBottom: '4px' }}>Communication Décentralisée</p>
+                            <p style={{ fontSize: '13px' }}>Commencez à taper pour envoyer un message chiffré au pair sélectionné.</p>
+                            <div style={{ marginTop: '16px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--bg-input)', padding: '8px 16px', borderRadius: 'var(--radius-sm)' }}>
+                                <Bot size={16} color="var(--accent)" />
+                                <span style={{ fontSize: '12px' }}>Taper <span style={{ color: 'var(--accent)', fontWeight: 600 }}>/ask</span> pour interagir avec l'IA Archipel</span>
                             </div>
-                            <div className={BubbleClass(m)}>{m.text}</div>
-                        </div>
-                    ))}
-                    {aiLoading && (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                            <div className="msg-sender">🤖 Gemini AI · ...</div>
-                            <div className="msg-bubble msg-ai" style={{ fontStyle: 'italic' }}>⏳ Génération en cours...</div>
                         </div>
                     )}
-                    <div ref={bottomRef} />
+
+                    {messages.map((m, i) => {
+                        const isMe = m.from === 'me';
+                        const isSystem = m.from === 'system';
+                        const isAi = m.from === 'archipel-ai' || m.from === 'gemini';
+
+                        let bubbleClass = isMe ? 'msg-me' : 'msg-peer';
+                        if (isSystem) bubbleClass = 'msg-peer'; // Generic for system
+                        if (isAi) bubbleClass = 'msg-ai';
+
+                        return (
+                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+                                {!isMe && (
+                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {isAi ? <><Bot size={12} /> IA ARCHIPEL</> : (isSystem ? <><ShieldAlert size={12} /> LOG SYSTÈME</> : <span className="mono">{m.from.substring(0, 16)}</span>)}
+                                    </div>
+                                )}
+
+                                <div style={{
+                                    background: isMe ? 'var(--accent)' : (isAi ? 'rgba(0,112,243,0.1)' : 'var(--bg-hover)'),
+                                    border: isAi ? '1px solid var(--border-focus)' : '1px solid transparent',
+                                    color: isMe ? '#fff' : 'var(--text)',
+                                    padding: '12px 16px',
+                                    borderRadius: 'var(--radius-lg)',
+                                    borderBottomRightRadius: isMe ? '0px' : 'var(--radius-lg)',
+                                    borderTopLeftRadius: !isMe ? '0px' : 'var(--radius-lg)',
+                                    fontSize: '14px',
+                                    lineHeight: '1.5',
+                                    position: 'relative'
+                                }}>
+                                    {m.text}
+                                    {!isAi && !isSystem && (
+                                        <div style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '8px', opacity: 0.5 }} title="Chiffré E2E">
+                                            <ShieldCheck size={12} />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                    {new Date(m.ts).toLocaleTimeString()}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {aiThinking && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '85%' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Bot size={12} /> IA ARCHIPEL
+                            </div>
+                            <div className="skeleton" style={{ width: '200px', height: '40px', borderRadius: 'var(--radius-lg)', borderTopLeftRadius: '0px' }}></div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Input */}
-                <div className="chat-input-row">
-                    <input
-                        className="input"
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        placeholder="Message chiffré... ou /ask Quelle est l'archi d'Archipel ?"
-                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                        style={{ flex: 1 }}
-                    />
-                    <button className="btn btn-primary" onClick={handleSend} disabled={sending || aiLoading}>
-                        {sending ? '📤' : aiLoading ? '🤖' : '➤ Envoyer'}
-                    </button>
+                {/* Input Area */}
+                <div style={{ padding: 'var(--sp-4)', borderTop: '1px solid var(--border)', background: 'var(--bg-app)' }}>
+                    <form onSubmit={handleSend} style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="Message chiffré ou /ask..."
+                            style={{ flex: 1, padding: '14px 18px', fontSize: '15px' }}
+                            value={inputText}
+                            onChange={e => setInputText(e.target.value)}
+                            disabled={sending}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            type="submit"
+                            disabled={sending || (!targetId && !inputText.startsWith('/ask') && !inputText.startsWith('@archipel-ai')) || !inputText.trim()}
+                            style={{ padding: '0 24px' }}
+                        >
+                            {sending ? 'Envoi...' : <><Send size={16} /> Envoyer</>}
+                        </button>
+                    </form>
                 </div>
+
             </div>
         </div>
     );

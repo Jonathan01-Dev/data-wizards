@@ -5,4 +5,5 @@ module.exports = {
     MULTICAST_ADDR: "239.255.42.99",
     MULTICAST_PORT: 6000,
     MAGIC: Buffer.from("ARCH"), // 4 bytes
+    NETWORK_SECRET: process.env.NETWORK_SECRET || "archipel-global-mesh-secret-2026",
 };

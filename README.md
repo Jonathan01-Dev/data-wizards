@@ -188,6 +188,16 @@ graph TD
 3. **Lancement de l'Interface (Frontend)** : `cd ui && npm run dev`
 4. **Utilisation** : Ouvrez `http://localhost:3000`. Testez la découverte, le chat chiffré, l'IA (`/ask ...`), et le partage de fichiers.
 
+---
+
+## 🛠️ Sprint 8 - Audit & Stabilisation (Post-Hackathon)
+
+Suite à un audit technique approfondi, les points suivants ont été stabilisés :
+- **Sécurité API** : Protection contre les failles de traversée de chemin (*Path Traversal*) sur les uploads.
+- **Identité Persistante** : Les clés Ed25519 sont désormais sauvegardées dans `.archipel_keys.json`.
+- **Intégrité Réseau** : Vérification stricte de l'HMAC-SHA256 sur chaque paquet binaire avec `timingSafeEqual`.
+- **Optimisation Large Files** : Le ré-assemblage et le hachage final utilisent désormais des **Streams** pour éviter la saturation de la mémoire vive.
+
 ### Identité de l'Équipe
 - **Team Name** : Archipel Wizards
 - **Hackathon** : LBS Hackathon 2026 - Sprint Final.
